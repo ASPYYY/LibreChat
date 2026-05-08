@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LibreChat Analytics</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; }
+  header { background: #1a1d2e; padding: 16px 32px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #2d2f45; }
+  header h1 { font-size: 1.4rem; color: #7c83fd; }
+  header span { font-size: 0.85rem; color: #888; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .card { background: #1a1d2e; border-radius: 12px; padding: 20px; border: 1px solid #2d2f45; }
+  .card .label { font-size: 0.78rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+  .card .value { font-size: 2rem; font-weight: 700; color: #7c83fd; }
+  .card .sub { font-size: 0.8rem; color: #666; margin-top: 4px; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-card { background: #1a1d2e; border-radius: 12px; padding: 20px; border: 1px solid #2d2f45; }
+  .chart-card h3 { font-size: 0.9rem; color: #aaa; margin-bottom: 16px; }
+  .chat-section { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .chat-box { background: #1a1d2e; border-radius: 12px; border: 1px solid #2d2f45; display: flex; flex-direction: column; height: 420px; }
+  .chat-box h3 { padding: 16px 20px; font-size: 0.9rem; color: #aaa; border-bottom: 1px solid #2d2f45; }
+  .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { padding: 10px 14px; border-radius: 10px; max-width: 85%; font-size: 0.88rem; line-height: 1.4; }
+  .msg.user { background: #3b3f6e; align-self: flex-end; }
+  .msg.ai { background: #252840; align-self: flex-start; border: 1px solid #3b3f6e; }
+  .msg .meta { font-size: 0.7rem; color: #666; margin-top: 4px; }
+  .chat-input { padding: 12px; border-top: 1px solid #2d2f45; display: flex; gap: 8px; }
+  .chat-input input { flex: 1; background: #0f1117; border: 1px solid #3b3f6e; border-radius: 8px; padding: 8px 12px; color: #e0e0e0; font-size: 0.88rem; outline: none; }
+  .chat-input button { background: #7c83fd; color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 0.88rem; transition: background 0.2s; }
+  .chat-input button:hover { background: #5c64f0; }
+  .history-box { background: #1a1d2e; border-radius: 12px; border: 1px solid #2d2f45; height: 420px; overflow-y: auto; }
+  .history-box h3 { padding: 16px 20px; font-size: 0.9rem; color: #aaa; border-bottom: 1px solid #2d2f45; position: sticky; top: 0; background: #1a1d2e; }
+  .history-item { padding: 12px 20px; border-bottom: 1px solid #1e2030; }
+  .history-item .q { font-size: 0.82rem; color: #ccc; margin-bottom: 4px; }
+  .history-item .a { font-size: 0.8rem; color: #888; }
+  .history-item .meta { font-size: 0.7rem; color: #555; margin-top: 4px; }
+  .badge { display: inline-block; background: #252840; border: 1px solid #3b3f6e; border-radius: 4px; padding: 2px 6px; font-size: 0.7rem; color: #7c83fd; margin-right: 4px; }
+  @media (max-width: 768px) { .charts, .chat-section { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="#7c83fd"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+  <h1>LibreChat Analytics</h1>
+  <span>Mock AI Interaction Dashboard</span>
+</header>
+<div class="container">
+  <div class="grid">
+    <div class="card"><div class="label">Total Messages</div><div class="value" id="total">0</div><div class="sub">all time</div></div>
+    <div class="card"><div class="label">Total Tokens</div><div class="value" id="tokens">0</div><div class="sub">used</div></div>
+    <div class="card"><div class="label">Avg Tokens / Msg</div><div class="value" id="avgTokens">0</div><div class="sub">per interaction</div></div>
+    <div class="card"><div class="label">Avg Response Time</div><div class="value" id="avgTime">0s</div><div class="sub">seconds</div></div>
+  </div>
+  <div class="charts">
+    <div class="chart-card"><h3>Messages per Day</h3><canvas id="dayChart"></canvas></div>
+    <div class="chart-card"><h3>Models Used</h3><canvas id="modelChart"></canvas></div>
+  </div>
+  <div class="chat-section">
+    <div class="chat-box">
+      <h3>Chat with Mock AI</h3>
+      <div class="messages" id="messages"></div>
+      <div class="chat-input">
+        <input type="text" id="msgInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendMsg()">
+        <button onclick="sendMsg()">Send</button>
+      </div>
+    </div>
+    <div class="history-box">
+      <h3>Interaction History</h3>
+      <div id="history"></div>
+    </div>
+  </div>
+</div>
+<script>
+const API = 'http://localhost:5001';
+let dayChart, modelChart;
+
+async function loadAnalytics() {
+  try {
+    const r = await fetch(API + '/api/analytics');
+    const d = await r.json();
+    document.getElementById('total').textContent = d.total;
+    if (d.stats && d.total > 0) {
+      document.getElementById('tokens').textContent = d.stats.total_tokens.toLocaleString();
+      document.getElementById('avgTokens').textContent = d.stats.avg_tokens_per_message;
+      document.getElementById('avgTime').textContent = d.stats.avg_response_time_sec + 's';
+      renderDayChart(d.stats.messages_per_day);
+      renderModelChart(d.stats.models_used);
+    }
+    renderHistory(d.interactions || []);
+  } catch(e) {
+    console.warn('API not reachable, using demo data');
+    loadDemoData();
+  }
+}
+
+function loadDemoData() {
+  document.getElementById('total').textContent = '24';
+  document.getElementById('tokens').textContent = '6,840';
+  document.getElementById('avgTokens').textContent = '285';
+  document.getElementById('avgTime').textContent = '1.3s';
+  renderDayChart({'2026-05-06':5,'2026-05-07':9,'2026-05-08':10});
+  renderModelChart({'mock-gpt-4':15,'mock-claude':9});
+  renderHistory([
+    {timestamp:'2026-05-08T18:00:00',user_message:'How does caching work?',ai_response:'Caching stores frequently used data in fast memory to reduce load on databases.',model:'mock-gpt-4',tokens_used:210,response_time_sec:0.9},
+    {timestamp:'2026-05-08T17:30:00',user_message:'Explain REST API',ai_response:'REST is an architectural style for distributed systems using HTTP methods.',model:'mock-claude',tokens_used:185,response_time_sec:1.1},
+    {timestamp:'2026-05-07T14:00:00',user_message:'What is PostgreSQL indexing?',ai_response:'Indexes speed up queries by creating lookup structures on columns.',model:'mock-gpt-4',tokens_used:320,response_time_sec:1.4},
+  ]);
+}
+
+function renderDayChart(data) {
+  const labels = Object.keys(data);
+  const values = Object.values(data);
+  if (dayChart) dayChart.destroy();
+  dayChart = new Chart(document.getElementById('dayChart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Messages', data: values, backgroundColor: '#7c83fd', borderRadius: 6 }] },
+    options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#888' }, grid: { color: '#2d2f45' } }, y: { ticks: { color: '#888' }, grid: { color: '#2d2f45' }, beginAtZero: true } } }
+  });
+}
+
+function renderModelChart(data) {
+  const labels = Object.keys(data);
+  const values = Object.values(data);
+  if (modelChart) modelChart.destroy();
+  modelChart = new Chart(document.getElementById('modelChart'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: ['#7c83fd','#f0883e','#3ecf8e','#e84393'], borderWidth: 0 }] },
+    options: { plugins: { legend: { labels: { color: '#aaa' } } } }
+  });
+}
+
+function renderHistory(items) {
+  const el = document.getElementById('history');
+  if (!items.length) { el.innerHTML = '<div style="padding:20px;color:#666;text-align:center">No interactions yet</div>'; return; }
+  el.innerHTML = [...items].reverse().map(i => `
+    <div class="history-item">
+      <div class="q">User: ${i.user_message}</div>
+      <div class="a">AI: ${i.ai_response}</div>
+      <div class="meta">
+        <span class="badge">${i.model}</span>
+        <span class="badge">${i.tokens_used} tokens</span>
+        <span class="badge">${i.response_time_sec}s</span>
+        ${new Date(i.timestamp).toLocaleString()}
+      </div>
+    </div>`).join('');
+}
+
+async function sendMsg() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  addMessage('user', text);
+  try {
+    const r = await fetch(API + '/api/chat', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: text}) });
+    const d = await r.json();
+    addMessage('ai', d.response, `${d.model} · ${d.tokens_used} tokens · ${d.response_time}s`);
+    loadAnalytics();
+  } catch(e) {
+    const mocks = ['Great question! Let me think about that.','I understand, here is my take on it.','Interesting! Based on available data...',];
+    addMessage('ai', mocks[Math.floor(Math.random()*mocks.length)], 'mock-gpt-4 · demo mode');
+  }
+}
+
+function addMessage(role, text, meta='') {
+  const el = document.getElementById('messages');
+  el.innerHTML += `<div class="msg ${role}">${text}${meta ? `<div class="meta">${meta}</div>` : ''}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+loadAnalytics();
+</script>
+</body>
+</html>
